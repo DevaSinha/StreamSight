@@ -1,0 +1,26 @@
+# Ignore .env files
+.env
+.env.local
+.env.*.local
+
+# Go build outputs
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Ignore vendor directory if using vendoring
+/vendor/
+
+# IDE directories
+.vscode/
+.idea/
+*.iml
+
+# MacOS files
+.DS_Store
+
+# Logs
+*.log

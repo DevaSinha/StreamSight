@@ -1,0 +1,40 @@
+version: '3.8'
+services:
+  frontend:
+    build: ./frontend
+    ports:
+      - '3000:3000'
+    volumes:
+      - ./frontend:/app
+    command: npm run dev
+
+  go-api:
+    build: ./go-api
+    ports:
+      - '8080:8080'
+    volumes:
+      - ./go-api:/app
+    command: go run main.go
+    environment:
+      - DB_USER=postgres
+      - DB_PASSWORD=root
+      - DB_NAME=stream-sight
+      - DB_HOST=db
+      - DB_PORT=5432
+      - SSL_MODE=disable
+    depends_on:
+      - db
+
+  db:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: root
+      POSTGRES_DB: stream-sight
+    ports:
+      - '5432:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:
