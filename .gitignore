@@ -24,3 +24,6 @@ bin/
 
 # Logs
 *.log
+
+# Test files
+*.mp4

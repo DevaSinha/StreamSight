@@ -25,6 +25,14 @@ services:
     depends_on:
       - db
 
+  worker:
+    build: ./go-worker
+    environment:
+      - API_ENDPOINT=http://api:8080
+      - RTSP_STREAMS=rtsp://camera1,rtsp://camera2
+    depends_on:
+      - api
+
   db:
     image: postgres:18
     environment:
