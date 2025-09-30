@@ -1,17 +1,18 @@
-FROM golang:1.20-alpine AS builder
+FROM gocv/opencv:4.12.0
 
 WORKDIR /app
 
+# Copy go.mod and go.sum to download deps first
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Copy source code
 COPY . .
 
-RUN go build -o worker .
+# Copy Haar cascade for face detection
+COPY haarcascade_frontalface_default.xml .
 
-FROM alpine:latest
+# Build the application
+RUN go build -o workerbin .
 
-WORKDIR /app
-
-COPY --from=builder /app/worker .
-
-ENV API_ENDPOINT=http://api:8080
-
-CMD ["./worker"]
+CMD ["./workerbin"]

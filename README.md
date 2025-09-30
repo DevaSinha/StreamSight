@@ -70,6 +70,11 @@ text
 
 ---
 
+- Build and run worker on docker
+
+```docker build -t streamsight-worker .```
+```docker run --rm --network="host" streamsight-worker```
+
 ## Notes
 
 - Use `-rtsp_transport tcp` in FFmpeg commands to avoid broken pipe errors.

@@ -6,6 +6,6 @@ type Config struct {
 
 func LoadConfig() Config {
 	return Config{
-		ApiEndpoint: baseURL,
+		ApiEndpoint: "http://host.docker.internal:8080",
 	}
 }

@@ -12,7 +12,7 @@ func main() {
 	if cfg.ApiEndpoint == "" {
 		log.Fatal("API_ENDPOINT environment variable must be set")
 	}
-	worker.RunWorker(cfg, "ws://localhost:8080/ws/alerts")
+	worker.RunWorker(cfg, "ws://host.docker.internal:8080/ws/alerts")
 
 	// Keep main alive
 	select {}

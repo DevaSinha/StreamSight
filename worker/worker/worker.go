@@ -4,15 +4,13 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
-	"net/url"
 	"sync"
 	"time"
 
 	"github.com/DevaSinha/StreamSight/worker/config"
 	"github.com/DevaSinha/StreamSight/worker/models"
-	"github.com/aler9/gortsplib"
-	url2 "github.com/aler9/gortsplib/pkg/url"
 	"github.com/gorilla/websocket"
+	"gocv.io/x/gocv"
 )
 
 func RunWorker(cfg config.Config, alertWSURL string) {
@@ -34,9 +32,7 @@ func RunWorker(cfg config.Config, alertWSURL string) {
 		}
 
 		for _, camera := range cameras {
-			if camera.Active {
-				go processCamera(camera, alertCh)
-			}
+			go processCamera(camera, alertCh)
 		}
 
 		time.Sleep(5 * time.Minute)
@@ -67,7 +63,6 @@ func alertSender(wsURL string, alertCh <-chan models.Alert) {
 			}
 		}
 
-		// Connection closed or error; reconnect after short delay
 		conn.Close()
 		time.Sleep(10 * time.Second)
 	}
@@ -78,7 +73,7 @@ func fetchCameras(apiEndpoint string) ([]models.Camera, error) {
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Authorization", "Bearer "+"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6InRlc3RAZXhhbXBsZS5jb20iLCJleHAiOjE3NTkyOTQxNzF9.VwW__6wN4SoO8pOwxv58UeNXO1SVA7DduBUX-qD_4P8")
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
@@ -95,48 +90,72 @@ func fetchCameras(apiEndpoint string) ([]models.Camera, error) {
 }
 
 func processCamera(camera models.Camera, alertCh chan<- models.Alert) {
-	u, err := url.Parse(camera.RtspURL)
+	log.Printf("Processing camera %s with URL: %s", camera.Name, camera.URL)
+
+	// Open video capture from RTSP stream
+	webcam, err := gocv.VideoCaptureFile(camera.URL)
 	if err != nil {
-		log.Printf("Invalid RTSP URL %s: %v", camera.RtspURL, err)
+		log.Printf("Error opening video capture for camera %s: %v", camera.Name, err)
 		return
 	}
-	client := gortsplib.Client{}
+	defer webcam.Close()
 
-	err = client.Start(u.Scheme, u.Host)
-	if err != nil {
-		log.Printf("Failed to start RTSP client for camera %s: %v", camera.Name, err)
+	// Load face detection classifier
+	classifier := gocv.NewCascadeClassifier()
+	defer classifier.Close()
+
+	// Load the Haar cascade file for face detection
+	if !classifier.Load("haarcascade_frontalface_default.xml") {
+		log.Printf("Error reading cascade file for camera %s", camera.Name)
 		return
 	}
-	defer client.Close()
 
-	var frameCounter int64
+	// Prepare image matrix
+	img := gocv.NewMat()
+	defer img.Close()
 
-	client.OnPacketRTP = func(ctx *gortsplib.ClientOnPacketRTPCtx) {
-		frameCounter++
-		if frameCounter%200 == 0 {
-			alert := models.Alert{
-				CameraName:  camera.Name,
-				Timestamp:   time.Now(),
-				Description: "Face detected",
-			}
-			alertCh <- alert
+	log.Printf("Starting face detection for camera: %s", camera.Name)
+
+	frameCount := 0
+	for {
+		if ok := webcam.Read(&img); !ok {
+			log.Printf("Cannot read frame from camera %s", camera.Name)
+			break
 		}
-	}
-	medias, baseURL, _, err := client.Describe((*url2.URL)(u))
-	if err != nil {
-		log.Printf("Describe error: %v", err)
-		return
+
+		if img.Empty() {
+			continue
+		}
+
+		frameCount++
+
+		// Detect faces every 30 frames (roughly once per second at 30fps)
+		if frameCount%30 == 0 {
+			// Detect faces
+			rects := classifier.DetectMultiScale(img)
+
+			if len(rects) > 0 {
+				log.Printf("Found %d face(s) in camera %s", len(rects), camera.Name)
+
+				alert := models.Alert{
+					CameraName:  camera.Name,
+					Timestamp:   time.Now(),
+					Description: "Face detected",
+				}
+
+				// Send alert to channel
+				select {
+				case alertCh <- alert:
+					log.Printf("Alert sent for camera %s", camera.Name)
+				default:
+					log.Printf("Alert channel full, dropping alert for camera %s", camera.Name)
+				}
+			}
+		}
+
+		// Small delay to prevent excessive CPU usage
+		time.Sleep(33 * time.Millisecond) // ~30fps
 	}
 
-	if err = client.SetupAll(medias, baseURL); err != nil {
-		log.Printf("Failed to setup tracks for camera %s: %v", camera.Name, err)
-		return
-	}
-
-	if _, err := client.Play(nil); err != nil {
-		log.Printf("Failed to play stream for camera %s: %v", camera.Name, err)
-		return
-	}
-
-	select {} // keep this goroutine alive
+	log.Printf("Camera %s processing stopped", camera.Name)
 }
